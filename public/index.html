@@ -537,6 +537,16 @@ footer .note{max-width:560px;font-size:13px}
   </div>
 </footer>
 
+
+<!-- Netlify Forms: these hidden copies let Netlify detect the two forms at deploy time.
+     The visible forms post to them from the script below. -->
+<form name="vote" data-netlify="true" netlify-honeypot="website" hidden>
+  <input name="subject"><input name="layout"><input name="layout_name"><input name="priorities"><input name="note"><input name="lang"><input name="voter"><input name="website">
+</form>
+<form name="interest" data-netlify="true" netlify-honeypot="website" hidden>
+  <input name="subject"><input name="name"><input name="company"><input name="email"><input name="phone"><input name="type"><input name="team"><input name="when"><input name="layout"><input name="layout_name"><textarea name="message"></textarea><input name="lang"><input name="website">
+</form>
+
 <!-- Room lightbox -->
 <div class="lb" id="lb" role="dialog" aria-modal="true" aria-labelledby="lb-title">
   <div class="lb-box" style="position:relative">
@@ -558,9 +568,11 @@ footer .note{max-width:560px;font-size:13px}
 
 <script>
 /* ======================================================================
-   SETTINGS · fill these in before publishing on your own domain
-   endpoint:     URL of the Google Apps Script web app (see apps-script.gs).
-                 Votes and registrations are sent there and land in a Google Sheet.
+   SETTINGS
+   On Netlify, votes and registrations go to Netlify Forms (see the hidden forms
+   near the end of the page) and Netlify emails each one. Leave endpoint empty for that.
+   endpoint:     optional. URL of a Google Apps Script web app (backend/apps-script.gs)
+                 to send them to a Google Sheet instead.
    contactEmail / contactPhone: shown under the interest form when set.
    ====================================================================== */
 const CONFIG = { endpoint: "", contactEmail: "", contactPhone: "" };
@@ -801,6 +813,8 @@ function renderContact(){
 const store={mode:'local',db:null,uid:null,ready:null};
 store.ready=(async()=>{
   if(CONFIG.endpoint){store.mode='endpoint';return}
+  // Live site on Netlify (or any normal web host): use Netlify Forms. Votes and registrations are emailed from Netlify.
+  if(/^https?:$/.test(location.protocol) && !SANDBOXED && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){store.mode='netlify';return}
   try{
     if(window.claude && typeof window.claude.use==='function'){
       const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
@@ -814,14 +828,31 @@ async function post(payload){
   const r=await fetch(CONFIG.endpoint,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
   if(!r.ok) throw new Error('HTTP '+r.status); return r.json().catch(()=>({}));
 }
+function layoutName(k){if(k==='empty') return T[lang].emptyName; const l=LAYOUTS.find(x=>x.k===k); return l?L(l)[0]:''}
+async function netlifyPost(form,data){
+  const body=new URLSearchParams({'form-name':form,...data}).toString();
+  const r=await fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+}
 async function saveVote(v){
   await store.ready;
+  if(store.mode==='netlify'){
+    let id=lsGet('p29-voter'); if(!id){id=(crypto.randomUUID?crypto.randomUUID():String(Math.random()).slice(2)); lsSet('p29-voter',id)}
+    await netlifyPost('vote',{subject:'Palmotićeva 29 · glas: '+layoutName(v.layout),layout:v.layout,layout_name:layoutName(v.layout),
+      priorities:v.priorities.map(k=>t('prio')[k]).join(', '),note:v.note,lang:v.lang,voter:id});
+    lsSet('p29-vote',v); return;
+  }
   if(store.mode==='endpoint'){const id=lsGet('p29-voter')||(crypto.randomUUID?crypto.randomUUID():String(Math.random()).slice(2)); lsSet('p29-voter',id); await post({type:'vote',voter:id,...v}); }
   else if(store.mode==='db'){await store.db.doc('votes/'+store.uid).set(v)}
   lsSet('p29-vote',v);
 }
 async function saveLead(l){
   await store.ready;
+  if(store.mode==='netlify'){
+    await netlifyPost('interest',{subject:'Palmotićeva 29 · prijava: '+l.name+(l.company?' ('+l.company+')':''),name:l.name,company:l.company,email:l.email,phone:l.phone,
+      type:l.type,team:l.team,when:l.when,layout:l.layout,layout_name:l.layout?layoutName(l.layout):'',message:l.message,lang:l.lang});
+    return;
+  }
   if(store.mode==='endpoint') await post({type:'lead',...l});
   else if(store.mode==='db') await store.db.collection('leads').doc(store.uid).set(l);
   else lsSet('p29-lead',l);

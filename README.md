@@ -16,10 +16,10 @@ Netlify watches this repository. Every push to `main` publishes the `public/` fo
 | `src/` | Viewer source and three.js r169 (MIT) |
 | `backend/apps-script.gs` | Google Apps Script that stores votes and registrations in a Google Sheet |
 
-## Settings
-At the top of the script in `public/index.html`:
-`const CONFIG = { endpoint: "", contactEmail: "", contactPhone: "" };`
-`endpoint` is the Google Apps Script web app URL. Until it is set, votes and registrations stay in each visitor's browser.
+## Votes and registrations
+They go to Netlify Forms (forms `vote` and `interest`) and Netlify emails each submission.
+Netlify UI: Forms shows every submission; Project configuration > Notifications > Form submission notifications sets the email.
+Optional: set `CONFIG.endpoint` in `public/index.html` to a Google Apps Script URL (`backend/apps-script.gs`) to use a Google Sheet instead.
 
 ## Rebuild the viewer (only if src/viewer.js changes)
     npx esbuild src/viewer.js --bundle --format=iife --minify --outfile=public/viewer.bundle.js
